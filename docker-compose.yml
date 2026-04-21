@@ -1,0 +1,80 @@
+services:
+  # MongoDB for permanent storage: questions, quizzes, quiz_attempts, aggregations
+  mongodb:
+    image: mongo:7.0
+    container_name: quiz-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-rootpassword}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-quiz_platform}
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh -u ${MONGO_USER:-root} -p ${MONGO_PASSWORD:-rootpassword} --authenticationDatabase admin
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - quiz-network
+    command: --auth
+
+  # Redis for time-critical operations: session management, live leaderboard, spam prevention
+  redis:
+    image: redis:7-alpine
+    container_name: quiz-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: redis-cli ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - quiz-network
+    command: redis-server --appendonly yes
+
+  # Node.js application (for development; replace with your actual service)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quiz-app
+    ports:
+      - "3000:3000"
+      - "5173:5173"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      MONGO_URI: mongodb://${MONGO_USER:-root}:${MONGO_PASSWORD:-rootpassword}@mongodb:27017/${MONGO_DB:-quiz_platform}?authSource=admin
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - quiz-network
+    command: npm run dev
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  quiz-network:
+    driver: bridge
+
