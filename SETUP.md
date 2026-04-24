@@ -29,6 +29,14 @@ quiz-redis          redis-server        Up (healthy)
 quiz-app            npm run dev         Up
 ```
 
+### 5. Start Frontend
+
+```bash
+docker-compose exec app sh
+cd frontend
+npm run dev
+```
+
 ## Service URLs & Connection Strings
 
 | Service | URL | Details |
